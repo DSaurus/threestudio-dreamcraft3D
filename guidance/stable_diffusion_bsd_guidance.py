@@ -2,6 +2,7 @@ import random
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
+import threestudio
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -16,8 +17,6 @@ from diffusers.loaders import AttnProcsLayers
 from diffusers.models.attention_processor import LoRAAttnProcessor
 from diffusers.models.embeddings import TimestepEmbedding
 from diffusers.utils.import_utils import is_xformers_available
-
-import threestudio
 from threestudio.models.prompt_processors.base import PromptProcessorOutput
 from threestudio.utils.base import BaseModule
 from threestudio.utils.misc import C, cleanup, parse_version
@@ -72,8 +71,6 @@ class StableDiffusionBSDGuidance(BaseModule):
         per_update_pretrain_step: int = 25
         only_pretrain_step: int = 1000
 
-
-
     cfg: Config
 
     def configure(self) -> None:
@@ -90,7 +87,7 @@ class StableDiffusionBSDGuidance(BaseModule):
             "requires_safety_checker": False,
             "torch_dtype": self.weights_dtype,
             "cache_dir": self.cfg.cache_dir,
-            "local_files_only": self.cfg.local_files_only
+            "local_files_only": self.cfg.local_files_only,
         }
 
         pipe_lora_kwargs = {
@@ -100,7 +97,7 @@ class StableDiffusionBSDGuidance(BaseModule):
             "requires_safety_checker": False,
             "torch_dtype": self.weights_dtype,
             "cache_dir": self.cfg.cache_dir,
-            "local_files_only": self.cfg.local_files_only
+            "local_files_only": self.cfg.local_files_only,
         }
 
         @dataclass
@@ -194,19 +191,21 @@ class StableDiffusionBSDGuidance(BaseModule):
         # self.lora_layers_pretrain._state_dict_hooks.clear()
 
         self.train_unet = UNet2DConditionModel.from_pretrained(
-            self.cfg.pretrained_model_name_or_path, subfolder="unet", 
-            torch_dtype=self.weights_dtype
+            self.cfg.pretrained_model_name_or_path,
+            subfolder="unet",
+            torch_dtype=self.weights_dtype,
         )
         self.train_unet.enable_xformers_memory_efficient_attention()
         self.train_unet.enable_gradient_checkpointing()
 
         self.train_unet_lora = UNet2DConditionModel.from_pretrained(
-            self.cfg.pretrained_model_name_or_path_lora, subfolder="unet",
-            torch_dtype=self.weights_dtype
+            self.cfg.pretrained_model_name_or_path_lora,
+            subfolder="unet",
+            torch_dtype=self.weights_dtype,
         )
         self.train_unet_lora.enable_xformers_memory_efficient_attention()
         self.train_unet_lora.enable_gradient_checkpointing()
-        
+
         for p in self.train_unet.parameters():
             p.requires_grad_(True)
         for p in self.train_unet_lora.parameters():
@@ -214,7 +213,7 @@ class StableDiffusionBSDGuidance(BaseModule):
         # for p in self.lora_layers.parameters():
         #     p.requires_grad_(False)
 
-        self.scheduler = DDPMScheduler.from_pretrained( # DDPM
+        self.scheduler = DDPMScheduler.from_pretrained(  # DDPM
             self.cfg.pretrained_model_name_or_path,
             subfolder="scheduler",
             torch_dtype=self.weights_dtype,
@@ -362,7 +361,7 @@ class StableDiffusionBSDGuidance(BaseModule):
             B = latents_inp.shape[0]
             t = torch.randint(
                 self.max_step,
-                self.max_step+1,
+                self.max_step + 1,
                 [B],
                 dtype=torch.long,
                 device=self.device,
@@ -370,10 +369,20 @@ class StableDiffusionBSDGuidance(BaseModule):
             noise = torch.randn_like(latents_inp)
             # latents = sample_scheduler.add_noise(latents_inp, noise, t).to(self.weights_dtype)
 
-            init_timestep = max(1, min(int(num_inference_steps * t[0].item() / self.num_train_timesteps), num_inference_steps))
+            init_timestep = max(
+                1,
+                min(
+                    int(num_inference_steps * t[0].item() / self.num_train_timesteps),
+                    num_inference_steps,
+                ),
+            )
             t_start = max(num_inference_steps - init_timestep, 0)
-            latent_timestep = sample_scheduler.timesteps[t_start : t_start + 1].repeat(batch_size)
-            latents = sample_scheduler.add_noise(latents_inp, noise, latent_timestep).to(self.weights_dtype)
+            latent_timestep = sample_scheduler.timesteps[t_start : t_start + 1].repeat(
+                batch_size
+            )
+            latents = sample_scheduler.add_noise(
+                latents_inp, noise, latent_timestep
+            ).to(self.weights_dtype)
 
         else:
             latents = pipe.prepare_latents(
@@ -465,13 +474,14 @@ class StableDiffusionBSDGuidance(BaseModule):
         azimuth: Float[Tensor, "B"],
         camera_distances: Float[Tensor, "B"],
         seed: int = 0,
-        mask = None,
+        mask=None,
         **kwargs,
     ) -> Float[Tensor, "N H W 3"]:
-
         rgb_BCHW = rgb.permute(0, 3, 1, 2)
         mask_BCHW = mask.permute(0, 3, 1, 2)
-        latents = self.get_latents(rgb_BCHW, rgb_as_latents=False) # TODO: 有部分概率是du或者ref image
+        latents = self.get_latents(
+            rgb_BCHW, rgb_as_latents=False
+        )  # TODO: 有部分概率是du或者ref image
 
         # view-dependent text embeddings
         text_embeddings_vd = prompt_utils.get_text_embeddings(
@@ -494,7 +504,9 @@ class StableDiffusionBSDGuidance(BaseModule):
         #     latents_inp=latents
         # )
 
-        return self.compute_grad_du(latents, rgb_BCHW, text_embeddings_vd, mask=mask_BCHW)
+        return self.compute_grad_du(
+            latents, rgb_BCHW, text_embeddings_vd, mask=mask_BCHW
+        )
 
     def sample_lora(
         self,
@@ -601,7 +613,7 @@ class StableDiffusionBSDGuidance(BaseModule):
         latents: Float[Tensor, "B 4 64 64"],
         rgb_BCHW_512: Float[Tensor, "B 3 512 512"],
         text_embeddings: Float[Tensor, "BB 77 768"],
-        mask = None,
+        mask=None,
         **kwargs,
     ):
         batch_size, _, _, _ = latents.shape
@@ -677,7 +689,7 @@ class StableDiffusionBSDGuidance(BaseModule):
                         rgb_BCHW_512.contiguous(),
                         gt_rgb.permute(0, 3, 1, 2).contiguous(),
                     ).sum(),
-                    "edit_image": edit_images.detach()
+                    "edit_image": edit_images.detach(),
                 }
             )
 
@@ -706,7 +718,7 @@ class StableDiffusionBSDGuidance(BaseModule):
             latents_noisy = self.scheduler.add_noise(latents, noise, t)
             # pred noise
             latent_model_input = torch.cat([latents_noisy] * 2, dim=0)
-            cross_attention_kwargs = {"scale": 0.0} 
+            cross_attention_kwargs = {"scale": 0.0}
             noise_pred_pretrain = self.forward_unet(
                 self.train_unet,
                 latent_model_input,
@@ -745,8 +757,6 @@ class StableDiffusionBSDGuidance(BaseModule):
                 # ),
                 cross_attention_kwargs={"scale": 0.0},
             )
-
-        
 
         # TODO: more general cases
         assert self.scheduler.config.prediction_type == "epsilon"
@@ -830,14 +840,16 @@ class StableDiffusionBSDGuidance(BaseModule):
             self.scheduler_lora_sample.config.num_train_timesteps = t.item()
             self.scheduler_lora_sample.set_timesteps(t.item() // 50 + 1)
 
-            for i, timestep in enumerate(self.scheduler_sample.timesteps):     
-            # for i, timestep in tqdm(enumerate(self.scheduler.timesteps)):   
+            for i, timestep in enumerate(self.scheduler_sample.timesteps):
+                # for i, timestep in tqdm(enumerate(self.scheduler.timesteps)):
                 latent_model_input = torch.cat([latents_noisy] * 2, dim=0)
                 latent_model_input_lora = torch.cat([latents_noisy_lora] * 2, dim=0)
 
                 # print(latent_model_input.shape)
                 with self.disable_unet_class_embedding(self.unet) as unet:
-                    cross_attention_kwargs = {"scale": 0.0} if self.single_model else None
+                    cross_attention_kwargs = (
+                        {"scale": 0.0} if self.single_model else None
+                    )
                     noise_pred_pretrain = self.forward_unet(
                         unet,
                         latent_model_input,
@@ -868,11 +880,15 @@ class StableDiffusionBSDGuidance(BaseModule):
                 ) = noise_pred_pretrain.chunk(2)
 
                 # NOTE: guidance scale definition here is aligned with diffusers, but different from other guidance
-                noise_pred_pretrain = noise_pred_pretrain_uncond + self.cfg.guidance_scale * (
-                    noise_pred_pretrain_text - noise_pred_pretrain_uncond
+                noise_pred_pretrain = (
+                    noise_pred_pretrain_uncond
+                    + self.cfg.guidance_scale
+                    * (noise_pred_pretrain_text - noise_pred_pretrain_uncond)
                 )
                 if mask is not None:
-                    noise_pred_pretrain = mask * noise_pred_pretrain + (1 - mask) * noise
+                    noise_pred_pretrain = (
+                        mask * noise_pred_pretrain + (1 - mask) * noise
+                    )
 
                 (
                     noise_pred_est_text,
@@ -887,8 +903,12 @@ class StableDiffusionBSDGuidance(BaseModule):
                 if mask is not None:
                     noise_pred_est = mask * noise_pred_est + (1 - mask) * noise
 
-                latents_noisy = self.scheduler_sample.step(noise_pred_pretrain, timestep, latents_noisy).prev_sample
-                latents_noisy_lora = self.scheduler_lora_sample.step(noise_pred_est, timestep, latents_noisy_lora).prev_sample
+                latents_noisy = self.scheduler_sample.step(
+                    noise_pred_pretrain, timestep, latents_noisy
+                ).prev_sample
+                latents_noisy_lora = self.scheduler_lora_sample.step(
+                    noise_pred_est, timestep, latents_noisy_lora
+                ).prev_sample
 
                 # noise = torch.randn_like(latents)
                 # latents_noisy = self.scheduler.step(noise_pred_pretrain, timestep, latents_noisy).prev_sample
@@ -904,24 +924,37 @@ class StableDiffusionBSDGuidance(BaseModule):
 
             import cv2
             import numpy as np
+
             if mask is not None:
-                print('hifa mask!')
-                prefix = 'vsd_mask'
+                print("hifa mask!")
+                prefix = "vsd_mask"
             else:
-                prefix = ''
-            temp = (hifa_images.permute(0, 2, 3, 1).detach().cpu()[0].numpy() * 255).astype(np.uint8)
-            cv2.imwrite(".threestudio_cache/%s%s_test.jpg" % (prefix, self.name), temp[:, :, ::-1])
-            temp = (hifa_lora_images.permute(0, 2, 3, 1).detach().cpu()[0].numpy() * 255).astype(np.uint8)
-            cv2.imwrite(".threestudio_cache/%s%s_test_lora.jpg" %  (prefix, self.name), temp[:, :, ::-1])
+                prefix = ""
+            temp = (
+                hifa_images.permute(0, 2, 3, 1).detach().cpu()[0].numpy() * 255
+            ).astype(np.uint8)
+            cv2.imwrite(
+                ".threestudio_cache/%s%s_test.jpg" % (prefix, self.name),
+                temp[:, :, ::-1],
+            )
+            temp = (
+                hifa_lora_images.permute(0, 2, 3, 1).detach().cpu()[0].numpy() * 255
+            ).astype(np.uint8)
+            cv2.imwrite(
+                ".threestudio_cache/%s%s_test_lora.jpg" % (prefix, self.name),
+                temp[:, :, ::-1],
+            )
 
         target = (latents_noisy - latents_noisy_lora + latents).detach()
         # target = latents_noisy.detach()
         targets_rgb = self.decode_latents(target)
         # targets_rgb = (hifa_images - hifa_lora_images + rgb).detach()
-        temp = (targets_rgb.permute(0, 2, 3, 1).detach().cpu()[0].numpy() * 255).astype(np.uint8)
+        temp = (targets_rgb.permute(0, 2, 3, 1).detach().cpu()[0].numpy() * 255).astype(
+            np.uint8
+        )
         cv2.imwrite(".threestudio_cache/%s_target.jpg" % self.name, temp[:, :, ::-1])
 
-        return w * 0.5 * F.mse_loss(target, latents, reduction='sum')
+        return w * 0.5 * F.mse_loss(target, latents, reduction="sum")
 
     def train_lora(
         self,
@@ -974,20 +1007,23 @@ class StableDiffusionBSDGuidance(BaseModule):
         text_embeddings: Float[Tensor, "BB 77 768"],
         camera_condition: Float[Tensor, "B 4 4"],
         sample_new_img=False,
-    ):  
+    ):
         B = latents.shape[0]
         if sample_new_img or len(self.cache_frames) == 0:
-            latents = latents.detach().repeat(self.cfg.lora_pretrain_n_timestamp_samples, 1, 1, 1)
+            latents = latents.detach().repeat(
+                self.cfg.lora_pretrain_n_timestamp_samples, 1, 1, 1
+            )
             images_sample = self._sample(
                 pipe=self.pipe_fix,
                 sample_scheduler=self.scheduler_sample,
                 text_embeddings=text_embeddings,
                 num_inference_steps=25,
                 guidance_scale=7.5,
-                cross_attention_kwargs = {"scale": 0.0},
+                cross_attention_kwargs={"scale": 0.0},
                 latents_inp=latents,
-            ).permute(0,3,1,2)
+            ).permute(0, 3, 1, 2)
             from torchvision.utils import save_image
+
             save_image(images_sample, f".threestudio_cache/test_sample.jpg")
             self.cache_frames.append(images_sample)
 
@@ -998,9 +1034,9 @@ class StableDiffusionBSDGuidance(BaseModule):
                 text_embeddings=text_embeddings,
                 num_inference_steps=25,
                 guidance_scale=1.0,
-                cross_attention_kwargs = {"scale": 0.0},
+                cross_attention_kwargs={"scale": 0.0},
                 latents_inp=latents,
-            ).permute(0,3,1,2)
+            ).permute(0, 3, 1, 2)
             save_image(pretrain_images_sample, f".threestudio_cache/test_pretrain.jpg")
         if len(self.cache_frames) > 10:
             self.cache_frames.pop(0)
@@ -1046,7 +1082,7 @@ class StableDiffusionBSDGuidance(BaseModule):
         # )
         # loss_pretrain = F.mse_loss(noise_pred.float(), target.float(), reduction="mean")
         # return loss_pretrain
-    
+
         noisy_latents = self.scheduler.add_noise(latents_sample, noise, t)
         if self.scheduler.config.prediction_type == "epsilon":
             target = noise
@@ -1066,7 +1102,7 @@ class StableDiffusionBSDGuidance(BaseModule):
             t,
             encoder_hidden_states=text_embeddings_cond.repeat(
                 self.cfg.lora_pretrain_n_timestamp_samples, 1, 1
-            )
+            ),
         )
         loss_pretrain = F.mse_loss(noise_pred.float(), target.float(), reduction="mean")
         return loss_pretrain
@@ -1097,7 +1133,7 @@ class StableDiffusionBSDGuidance(BaseModule):
         c2w: Float[Tensor, "B 4 4"],
         rgb_as_latents=False,
         mask: Float[Tensor, "B H W 1"] = None,
-        lora_prompt_utils = None,
+        lora_prompt_utils=None,
         **kwargs,
     ):
         batch_size = rgb.shape[0]
@@ -1105,7 +1141,8 @@ class StableDiffusionBSDGuidance(BaseModule):
         rgb_BCHW = rgb.permute(0, 3, 1, 2)
         latents = self.get_latents(rgb_BCHW, rgb_as_latents=rgb_as_latents)
 
-        if mask is not None: mask = mask.permute(0, 3, 1, 2)
+        if mask is not None:
+            mask = mask.permute(0, 3, 1, 2)
 
         # view-dependent text embeddings
         text_embeddings_vd = prompt_utils.get_text_embeddings(
@@ -1123,7 +1160,7 @@ class StableDiffusionBSDGuidance(BaseModule):
             # input text embeddings, view-independent
             text_embeddings = prompt_utils.get_text_embeddings(
                 elevation, azimuth, camera_distances, view_dependent_prompting=False
-            )   
+            )
 
         if self.cfg.camera_condition_type == "extrinsics":
             camera_condition = c2w
@@ -1135,18 +1172,26 @@ class StableDiffusionBSDGuidance(BaseModule):
             )
 
         do_update_pretrain = (self.cfg.only_pretrain_step > 0) and (
-            (self.global_step % self.cfg.only_pretrain_step) < (self.cfg.only_pretrain_step // 5)
+            (self.global_step % self.cfg.only_pretrain_step)
+            < (self.cfg.only_pretrain_step // 5)
         )
 
         guidance_out = {}
         if do_update_pretrain:
             sample_new_img = self.global_step % self.cfg.per_update_pretrain_step == 0
-            loss_pretrain = self.train_pretrain(latents, text_embeddings_vd, camera_condition, sample_new_img=sample_new_img)
-            guidance_out.update({
-                "loss_pretrain": loss_pretrain,
-                "min_step": self.min_step,
-                "max_step": self.max_step,
-            })
+            loss_pretrain = self.train_pretrain(
+                latents,
+                text_embeddings_vd,
+                camera_condition,
+                sample_new_img=sample_new_img,
+            )
+            guidance_out.update(
+                {
+                    "loss_pretrain": loss_pretrain,
+                    "min_step": self.min_step,
+                    "max_step": self.max_step,
+                }
+            )
             return guidance_out
 
         grad = self.compute_grad_vsd(
@@ -1165,16 +1210,20 @@ class StableDiffusionBSDGuidance(BaseModule):
 
         loss_lora = self.train_lora(latents, text_embeddings, camera_condition)
 
-        guidance_out.update({
-            "loss_sd": loss_vsd,
-            "loss_lora": loss_lora,
-            "grad_norm": grad.norm(),
-            "min_step": self.min_step,
-            "max_step": self.max_step,
-        })
+        guidance_out.update(
+            {
+                "loss_sd": loss_vsd,
+                "loss_lora": loss_lora,
+                "grad_norm": grad.norm(),
+                "min_step": self.min_step,
+                "max_step": self.max_step,
+            }
+        )
 
         if self.cfg.use_du:
-            du_out = self.compute_grad_du(latents, rgb_BCHW, text_embeddings_vd, mask=mask)
+            du_out = self.compute_grad_du(
+                latents, rgb_BCHW, text_embeddings_vd, mask=mask
+            )
             guidance_out.update(du_out)
 
         return guidance_out

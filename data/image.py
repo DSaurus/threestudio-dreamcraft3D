@@ -6,11 +6,9 @@ from dataclasses import dataclass, field
 import cv2
 import numpy as np
 import pytorch_lightning as pl
+import threestudio
 import torch
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, Dataset, IterableDataset
-
-import threestudio
 from threestudio import register
 from threestudio.data.uncond import (
     RandomCameraDataModuleConfig,
@@ -27,6 +25,7 @@ from threestudio.utils.ops import (
     get_rays,
 )
 from threestudio.utils.typing import *
+from torch.utils.data import DataLoader, Dataset, IterableDataset
 
 
 @dataclass
@@ -61,11 +60,17 @@ class SingleImageDataBase:
             random_camera_cfg = parse_structured(
                 RandomCameraDataModuleConfig, self.cfg.get("random_camera", {})
             )
-            # FIXME: 
+            # FIXME:
             if self.cfg.use_mixed_camera_config:
                 if self.rank % 2 == 0:
-                    random_camera_cfg.camera_distance_range=[self.cfg.default_camera_distance, self.cfg.default_camera_distance]
-                    random_camera_cfg.fovy_range=[self.cfg.default_fovy_deg, self.cfg.default_fovy_deg]
+                    random_camera_cfg.camera_distance_range = [
+                        self.cfg.default_camera_distance,
+                        self.cfg.default_camera_distance,
+                    ]
+                    random_camera_cfg.fovy_range = [
+                        self.cfg.default_fovy_deg,
+                        self.cfg.default_fovy_deg,
+                    ]
                     self.fixed_camera_intrinsic = True
                 else:
                     self.fixed_camera_intrinsic = False
@@ -301,10 +306,10 @@ class SingleImageDataset(Dataset, SingleImageDataBase):
         batch = self.random_pose_generator[index]
         batch.update(
             {
-            "height": self.random_pose_generator.cfg.eval_height,
-            "width": self.random_pose_generator.cfg.eval_width,
-            "mvp_mtx_ref": self.mvp_mtx[0],
-            "c2w_ref": self.c2w4x4,
+                "height": self.random_pose_generator.cfg.eval_height,
+                "width": self.random_pose_generator.cfg.eval_width,
+                "mvp_mtx_ref": self.mvp_mtx[0],
+                "c2w_ref": self.c2w4x4,
             }
         )
         return batch

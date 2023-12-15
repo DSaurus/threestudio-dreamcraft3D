@@ -2,20 +2,19 @@ import os
 import random
 import shutil
 from dataclasses import dataclass, field
-import cv2
-import clip
-import torch
-import shutil
-import numpy as np
-import torch.nn.functional as F
-from torchmetrics import PearsonCorrCoef
 
+import clip
+import cv2
+import numpy as np
 import threestudio
+import torch
+import torch.nn.functional as F
 from threestudio.systems.base import BaseLift3DSystem
+from threestudio.utils.misc import get_device, get_rank, load_module_weights
 from threestudio.utils.ops import binary_cross_entropy, dot
-from threestudio.utils.typing import *
-from threestudio.utils.misc import get_rank, get_device, load_module_weights
 from threestudio.utils.perceptual import PerceptualLoss
+from threestudio.utils.typing import *
+from torchmetrics import PearsonCorrCoef
 
 
 @threestudio.register("dreamcraft3d-system")
@@ -65,12 +64,13 @@ class ImageConditionDreamFusion(BaseLift3DSystem):
         self.perceptual_loss = threestudio.find("perceptual-loss")(p_config)
 
         if not (self.cfg.control_guidance_type == ""):
-            self.control_guidance = threestudio.find(self.cfg.control_guidance_type)(self.cfg.control_guidance)
-            self.control_prompt_processor = threestudio.find(self.cfg.control_prompt_processor_type)(
-                self.cfg.control_prompt_processor
+            self.control_guidance = threestudio.find(self.cfg.control_guidance_type)(
+                self.cfg.control_guidance
             )
+            self.control_prompt_processor = threestudio.find(
+                self.cfg.control_prompt_processor_type
+            )(self.cfg.control_prompt_processor)
             self.control_prompt_utils = self.control_prompt_processor()
-        
 
     def forward(self, batch: Dict[str, Any]) -> Dict[str, Any]:
         if self.cfg.stage == "texture":
@@ -146,9 +146,14 @@ class ImageConditionDreamFusion(BaseLift3DSystem):
                         set_loss("rgb", F.mse_loss(gt_rgb, pred_rgb))
                     else:
                         if self.cfg.stage == "texture":
-                            grow_mask = F.max_pool2d(1 - gt_mask.float().permute(0, 3, 1, 2), (9, 9), 1, 4)
+                            grow_mask = F.max_pool2d(
+                                1 - gt_mask.float().permute(0, 3, 1, 2), (9, 9), 1, 4
+                            )
                             grow_mask = (1 - grow_mask).permute(0, 2, 3, 1)
-                            set_loss("rgb", F.l1_loss(gt_rgb*grow_mask, pred_rgb*grow_mask))
+                            set_loss(
+                                "rgb",
+                                F.l1_loss(gt_rgb * grow_mask, pred_rgb * grow_mask),
+                            )
                         else:
                             set_loss("rgb", F.l1_loss(gt_rgb, pred_rgb))
 
@@ -158,13 +163,19 @@ class ImageConditionDreamFusion(BaseLift3DSystem):
 
                 # mask binary cross loss
                 if self.C(self.cfg.loss.lambda_mask_binary) > 0:
-                    set_loss("mask_binary", F.binary_cross_entropy(
-                    out["opacity"].clamp(1.0e-5, 1.0 - 1.0e-5),
-                    batch["mask"].float(),))
+                    set_loss(
+                        "mask_binary",
+                        F.binary_cross_entropy(
+                            out["opacity"].clamp(1.0e-5, 1.0 - 1.0e-5),
+                            batch["mask"].float(),
+                        ),
+                    )
 
                 # depth loss
                 if self.C(self.cfg.loss.lambda_depth) > 0:
-                    valid_gt_depth = batch["ref_depth"][gt_mask.squeeze(-1)].unsqueeze(1)
+                    valid_gt_depth = batch["ref_depth"][gt_mask.squeeze(-1)].unsqueeze(
+                        1
+                    )
                     valid_pred_depth = out["depth"][gt_mask].unsqueeze(1)
                     with torch.no_grad():
                         A = torch.cat(
@@ -184,21 +195,20 @@ class ImageConditionDreamFusion(BaseLift3DSystem):
 
             # normal loss
             if self.C(self.cfg.loss.lambda_normal) > 0:
-                valid_gt_normal = (
-                    1 - 2 * gt_normal[gt_mask.squeeze(-1)]
-                )  # [B, 3]
+                valid_gt_normal = 1 - 2 * gt_normal[gt_mask.squeeze(-1)]  # [B, 3]
                 # FIXME: reverse x axis
                 pred_normal = out["comp_normal_viewspace"]
                 pred_normal[..., 0] = 1 - pred_normal[..., 0]
-                valid_pred_normal = (
-                    2 * pred_normal[gt_mask.squeeze(-1)] - 1
-                )  # [B, 3]
+                valid_pred_normal = 2 * pred_normal[gt_mask.squeeze(-1)] - 1  # [B, 3]
                 set_loss(
                     "normal",
                     1 - F.cosine_similarity(valid_pred_normal, valid_gt_normal).mean(),
                 )
 
-        elif guidance == "guidance" and self.true_global_step > self.cfg.freq.no_diff_steps:
+        elif (
+            guidance == "guidance"
+            and self.true_global_step > self.cfg.freq.no_diff_steps
+        ):
             if self.cfg.stage == "geometry" and render_type == "normal":
                 guidance_inp = out["comp_normal"]
             else:
@@ -217,7 +227,6 @@ class ImageConditionDreamFusion(BaseLift3DSystem):
                     set_loss(name.split("_")[-1], value)
 
             if self.guidance_3d is not None:
-
                 # FIXME: use mixed camera config
                 if not self.cfg.use_mixed_camera_config or get_rank() % 2 == 0:
                     guidance_3d_out = self.guidance_3d(
@@ -227,10 +236,12 @@ class ImageConditionDreamFusion(BaseLift3DSystem):
                         guidance_eval=guidance_eval,
                     )
                     for name, value in guidance_3d_out.items():
-                        if not (isinstance(value, torch.Tensor) and len(value.shape) > 0):
+                        if not (
+                            isinstance(value, torch.Tensor) and len(value.shape) > 0
+                        ):
                             self.log(f"train/{name}_3d", value)
                         if name.startswith("loss_"):
-                           set_loss("3d_"+name.split("_")[-1], value)
+                            set_loss("3d_" + name.split("_")[-1], value)
                     # set_loss("3d_sd", guidance_out["loss_sd"])
 
         # Regularization
@@ -283,18 +294,25 @@ class ImageConditionDreamFusion(BaseLift3DSystem):
                     "opaque", binary_cross_entropy(opacity_clamped, opacity_clamped)
                 )
 
-            if "lambda_eikonal" in self.cfg.loss and self.C(self.cfg.loss.lambda_eikonal) > 0:
+            if (
+                "lambda_eikonal" in self.cfg.loss
+                and self.C(self.cfg.loss.lambda_eikonal) > 0
+            ):
                 if "sdf_grad" not in out:
                     raise ValueError(
                         "SDF grad is required for eikonal loss, no normal is found in the output."
                     )
                 set_loss(
-                    "eikonal", (
+                    "eikonal",
+                    (
                         (torch.linalg.norm(out["sdf_grad"], ord=2, dim=-1) - 1.0) ** 2
-                    ).mean()
+                    ).mean(),
                 )
-            
-            if "lambda_z_variance"in self.cfg.loss and self.C(self.cfg.loss.lambda_z_variance) > 0:
+
+            if (
+                "lambda_z_variance" in self.cfg.loss
+                and self.C(self.cfg.loss.lambda_z_variance) > 0
+            ):
                 # z variance loss proposed in HiFA: http://arxiv.org/abs/2305.18766
                 # helps reduce floaters and produce solid geometry
                 loss_z_variance = out["z_variance"][out["opacity"] > 0.5].mean()
@@ -306,10 +324,15 @@ class ImageConditionDreamFusion(BaseLift3DSystem):
             if self.C(self.cfg.loss.lambda_laplacian_smoothness) > 0:
                 set_loss("laplacian_smoothness", out["mesh"].laplacian())
         elif self.cfg.stage == "texture":
-            if self.C(self.cfg.loss.lambda_reg) > 0 and guidance == "guidance" and self.true_global_step % 5 == 0:
-            
+            if (
+                self.C(self.cfg.loss.lambda_reg) > 0
+                and guidance == "guidance"
+                and self.true_global_step % 5 == 0
+            ):
                 rgb = out["comp_rgb"]
-                rgb = F.interpolate(rgb.permute(0, 3, 1, 2), (512, 512), mode='bilinear').permute(0, 2, 3, 1)
+                rgb = F.interpolate(
+                    rgb.permute(0, 3, 1, 2), (512, 512), mode="bilinear"
+                ).permute(0, 2, 3, 1)
                 control_prompt_utils = self.control_prompt_processor()
                 with torch.no_grad():
                     control_dict = self.control_guidance(
@@ -320,10 +343,20 @@ class ImageConditionDreamFusion(BaseLift3DSystem):
                     )
 
                     edit_images = control_dict["edit_images"]
-                    temp = (edit_images.detach().cpu()[0].numpy() * 255).astype(np.uint8)
-                    cv2.imwrite(".threestudio_cache/control_debug.jpg", temp[:, :, ::-1])
-                    
-                loss_reg = (rgb.shape[1] // 8) * (rgb.shape[2] // 8) * self.perceptual_loss(edit_images.permute(0, 3, 1, 2), rgb.permute(0, 3, 1, 2)).mean()
+                    temp = (edit_images.detach().cpu()[0].numpy() * 255).astype(
+                        np.uint8
+                    )
+                    cv2.imwrite(
+                        ".threestudio_cache/control_debug.jpg", temp[:, :, ::-1]
+                    )
+
+                loss_reg = (
+                    (rgb.shape[1] // 8)
+                    * (rgb.shape[2] // 8)
+                    * self.perceptual_loss(
+                        edit_images.permute(0, 3, 1, 2), rgb.permute(0, 3, 1, 2)
+                    ).mean()
+                )
                 set_loss("reg", loss_reg)
         else:
             raise ValueError(f"Unknown stage {self.cfg.stage}")
@@ -362,23 +395,31 @@ class ImageConditionDreamFusion(BaseLift3DSystem):
             )
             do_guidance = not do_ref
             if hasattr(self.guidance.cfg, "only_pretrain_step"):
-                if (self.guidance.cfg.only_pretrain_step > 0) and (self.global_step % self.guidance.cfg.only_pretrain_step) < (self.guidance.cfg.only_pretrain_step // 5):
+                if (self.guidance.cfg.only_pretrain_step > 0) and (
+                    self.global_step % self.guidance.cfg.only_pretrain_step
+                ) < (self.guidance.cfg.only_pretrain_step // 5):
                     do_guidance = True
                     do_ref = False
 
         if self.cfg.stage == "geometry":
-            render_type = "rgb" if self.true_global_step % self.cfg.freq.n_rgb == 0 else "normal"
+            render_type = (
+                "rgb" if self.true_global_step % self.cfg.freq.n_rgb == 0 else "normal"
+            )
         else:
             render_type = "rgb"
 
         total_loss = 0.0
 
         if do_guidance:
-            out = self.training_substep(batch, batch_idx, guidance="guidance", render_type=render_type)
+            out = self.training_substep(
+                batch, batch_idx, guidance="guidance", render_type=render_type
+            )
             total_loss += out["loss"]
 
         if do_ref:
-            out = self.training_substep(batch, batch_idx, guidance="ref", render_type=render_type)
+            out = self.training_substep(
+                batch, batch_idx, guidance="ref", render_type=render_type
+            )
             total_loss += out["loss"]
 
         self.log("train/loss", total_loss, prog_bar=True)
@@ -437,15 +478,9 @@ class ImageConditionDreamFusion(BaseLift3DSystem):
                 else []
             )
             + (
-                [
-                    {
-                        "type": "grayscale", 
-                        "img": out["depth"][0], 
-                        "kwargs": {}
-                    }
-                ] 
+                [{"type": "grayscale", "img": out["depth"][0], "kwargs": {}}]
                 if "depth" in out
-                else [] 
+                else []
             )
             + [
                 {
@@ -454,7 +489,6 @@ class ImageConditionDreamFusion(BaseLift3DSystem):
                     "kwargs": {"cmap": None, "data_range": (0, 1)},
                 },
             ],
-            
             name="validation_step",
             step=self.true_global_step,
         )
@@ -527,11 +561,7 @@ class ImageConditionDreamFusion(BaseLift3DSystem):
                 else []
             )
             + (
-                [
-                    {
-                        "type": "grayscale", "img": out["depth"][0], "kwargs": {}
-                        }
-                ]
+                [{"type": "grayscale", "img": out["depth"][0], "kwargs": {}}]
                 if "depth" in out
                 else []
             )
@@ -545,21 +575,24 @@ class ImageConditionDreamFusion(BaseLift3DSystem):
             + (
                 [
                     {
-                        "type": "grayscale", "img": out["opacity_vis"][0, :, :, 0], 
-                        "kwargs": {"cmap": None, "data_range": (0, 1)}
-                        }
+                        "type": "grayscale",
+                        "img": out["opacity_vis"][0, :, :, 0],
+                        "kwargs": {"cmap": None, "data_range": (0, 1)},
+                    }
                 ]
                 if "opacity_vis" in out
                 else []
-            )
-            ,
+            ),
             name="test_step",
             step=self.true_global_step,
         )
 
         # FIXME: save camera extrinsics
         c2w = batch["c2w"]
-        save_path = os.path.join(self.get_save_dir(), f"it{self.true_global_step}-test/{batch['index'][0]}.npy")
+        save_path = os.path.join(
+            self.get_save_dir(),
+            f"it{self.true_global_step}-test/{batch['index'][0]}.npy",
+        )
         np.save(save_path, c2w.detach().cpu().numpy()[0])
 
     def on_test_epoch_end(self):
@@ -583,15 +616,17 @@ class ImageConditionDreamFusion(BaseLift3DSystem):
         pass
 
     def on_load_checkpoint(self, checkpoint):
-        for k in list(checkpoint['state_dict'].keys()):
+        for k in list(checkpoint["state_dict"].keys()):
             if k.startswith("guidance."):
                 return
-        guidance_state_dict = {"guidance."+k : v for (k,v) in self.guidance.state_dict().items()}
-        checkpoint['state_dict'] = {**checkpoint['state_dict'], **guidance_state_dict}
-        return 
+        guidance_state_dict = {
+            "guidance." + k: v for (k, v) in self.guidance.state_dict().items()
+        }
+        checkpoint["state_dict"] = {**checkpoint["state_dict"], **guidance_state_dict}
+        return
 
     def on_save_checkpoint(self, checkpoint):
-        for k in list(checkpoint['state_dict'].keys()):
+        for k in list(checkpoint["state_dict"].keys()):
             if k.startswith("guidance."):
-                checkpoint['state_dict'].pop(k)
-        return 
+                checkpoint["state_dict"].pop(k)
+        return
