@@ -6,8 +6,8 @@ seed: 0
 data_type: "dreamcraft3d-single-image-datamodule"
 data:
   image_path: ./load/images/hamburger_rgba.png
-  height: 256
-  width: 256
+  height: 128
+  width: 128
   default_elevation_deg: 0.0
   default_azimuth_deg: 0.0
   default_camera_distance: 3.8
@@ -15,11 +15,11 @@ data:
   requires_depth: true
   requires_normal: ${cmaxgt0:${system.loss.lambda_normal}}
   random_camera:
-    height: 256
-    width: 256
+    height: 128
+    width: 128
     batch_size: 1
-    eval_height: 512
-    eval_width: 512
+    eval_height: 256
+    eval_width: 256
     eval_batch_size: 1
     elevation_range: [-10, 45]
     azimuth_range: [-180, 180]
