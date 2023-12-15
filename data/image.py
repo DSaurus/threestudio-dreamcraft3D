@@ -315,7 +315,7 @@ class SingleImageDataset(Dataset, SingleImageDataBase):
         return batch
 
 
-@register("single-image-datamodule")
+@register("dreamcraft3d-single-image-datamodule")
 class SingleImageDataModule(pl.LightningDataModule):
     cfg: SingleImageDataModuleConfig
 

@@ -12,7 +12,6 @@ import torch.nn.functional as F
 from threestudio.systems.base import BaseLift3DSystem
 from threestudio.utils.misc import get_device, get_rank, load_module_weights
 from threestudio.utils.ops import binary_cross_entropy, dot
-from threestudio.utils.perceptual import PerceptualLoss
 from threestudio.utils.typing import *
 from torchmetrics import PearsonCorrCoef
 

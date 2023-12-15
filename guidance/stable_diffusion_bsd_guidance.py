@@ -34,7 +34,7 @@ class ToWeightsDType(nn.Module):
         return self.module(x).to(self.dtype)
 
 
-@threestudio.register("stable-diffusion-bsd-guidance")
+@threestudio.register("dreamcraft3d-stable-diffusion-bsd-guidance")
 class StableDiffusionBSDGuidance(BaseModule):
     @dataclass
     class Config(BaseModule.Config):
