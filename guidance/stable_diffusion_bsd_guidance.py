@@ -1212,7 +1212,7 @@ class StableDiffusionBSDGuidance(BaseModule):
 
         guidance_out.update(
             {
-                "loss_sd": loss_vsd,
+                "loss_vsd": loss_vsd,
                 "loss_lora": loss_lora,
                 "grad_norm": grad.norm(),
                 "min_step": self.min_step,

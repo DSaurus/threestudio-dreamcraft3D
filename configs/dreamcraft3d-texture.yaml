@@ -98,10 +98,10 @@ system:
       project: "threestudio"
 
   loss:
-    lambda_sd: 0.01
+    lambda_vsd: 0.01
     lambda_lora: 0.1
     lambda_pretrain: 0.1
-    lambda_3d_sd: 0.0
+    lambda_3d_sds: 0.0
     lambda_rgb: 1000.
     lambda_mask: 100.
     lambda_mask_binary: 0.0

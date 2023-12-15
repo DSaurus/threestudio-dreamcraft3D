@@ -123,8 +123,8 @@ system:
       project: "threestudio"
 
   loss:
-    lambda_sd: 0.1
-    lambda_3d_sd: 0.1
+    lambda_sds: 0.1
+    lambda_3d_sds: 0.1
     lambda_rgb: 1000.0
     lambda_mask: 100.0
     lambda_mask_binary: 0.0
