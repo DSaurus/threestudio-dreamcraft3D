@@ -172,6 +172,9 @@ class StableDiffusionBSDGuidance(BaseModule):
         self.camera_embedding = ToWeightsDType(
             TimestepEmbedding(16, 1280), self.weights_dtype
         ).to(self.device)
+        self.camera_embedding_lora = ToWeightsDType(
+            TimestepEmbedding(16, 1280), self.weights_dtype
+        ).to(self.device)
         # self.unet_lora.class_embedding = self.camera_embedding
 
         # set up LoRA layers
@@ -197,6 +200,7 @@ class StableDiffusionBSDGuidance(BaseModule):
         )
         self.train_unet.enable_xformers_memory_efficient_attention()
         self.train_unet.enable_gradient_checkpointing()
+        # self.train_unet.class_embedding = self.camera_embedding
 
         self.train_unet_lora = UNet2DConditionModel.from_pretrained(
             self.cfg.pretrained_model_name_or_path_lora,
@@ -205,6 +209,7 @@ class StableDiffusionBSDGuidance(BaseModule):
         )
         self.train_unet_lora.enable_xformers_memory_efficient_attention()
         self.train_unet_lora.enable_gradient_checkpointing()
+        self.train_unet_lora.class_embedding = self.camera_embedding_lora
 
         for p in self.train_unet.parameters():
             p.requires_grad_(True)
@@ -719,27 +724,27 @@ class StableDiffusionBSDGuidance(BaseModule):
             # pred noise
             latent_model_input = torch.cat([latents_noisy] * 2, dim=0)
             cross_attention_kwargs = {"scale": 0.0}
+            # noise_pred_pretrain = self.forward_unet(
+            #     self.train_unet,
+            #     latent_model_input,
+            #     torch.cat([t] * 2),
+            #     encoder_hidden_states=text_embeddings_vd,
+            #     cross_attention_kwargs=cross_attention_kwargs,
+            # )
             noise_pred_pretrain = self.forward_unet(
                 self.train_unet,
                 latent_model_input,
                 torch.cat([t] * 2),
                 encoder_hidden_states=text_embeddings_vd,
                 cross_attention_kwargs=cross_attention_kwargs,
+                # class_labels=torch.cat(
+                #     [
+                #         camera_condition.view(B, -1),
+                #         camera_condition.view(B, -1),
+                #     ],
+                #     dim=0,
+                # ),
             )
-            # noise_pred_pretrain = self.forward_unet(
-            #     self.unet_lora,
-            #     latent_model_input,
-            #     torch.cat([t] * 2),
-            #     encoder_hidden_states=text_embeddings_vd,
-            #     cross_attention_kwargs=cross_attention_kwargs,
-            #     class_labels=torch.cat(
-            #         [
-            #             torch.zeros_like(camera_condition.view(B, -1)),
-            #             torch.zeros_like(camera_condition.view(B, -1)),
-            #         ],
-            #         dim=0,
-            #     ),
-            # )
 
             # use view-independent text embeddings in LoRA
             text_embeddings_cond, _ = text_embeddings.chunk(2)
@@ -748,13 +753,13 @@ class StableDiffusionBSDGuidance(BaseModule):
                 latent_model_input,
                 torch.cat([t] * 2),
                 encoder_hidden_states=torch.cat([text_embeddings_cond] * 2),
-                # class_labels=torch.cat(
-                #     [
-                #         camera_condition.view(B, -1),
-                #         torch.zeros_like(camera_condition.view(B, -1)),
-                #     ],
-                #     dim=0,
-                # ),
+                class_labels=torch.cat(
+                    [
+                        camera_condition.view(B, -1),
+                        torch.zeros_like(camera_condition.view(B, -1)),
+                    ],
+                    dim=0,
+                ),
                 cross_attention_kwargs={"scale": 0.0},
             )
 
@@ -985,8 +990,8 @@ class StableDiffusionBSDGuidance(BaseModule):
             )
         # use view-independent text embeddings in LoRA
         text_embeddings_cond, _ = text_embeddings.chunk(2)
-        if self.cfg.lora_cfg_training and random.random() < 0.1:
-            camera_condition = torch.zeros_like(camera_condition)
+        # if self.cfg.lora_cfg_training and random.random() < 0.1:
+        #     camera_condition = torch.zeros_like(camera_condition)
         noise_pred = self.forward_unet(
             self.train_unet_lora,
             noisy_latents,
@@ -994,9 +999,9 @@ class StableDiffusionBSDGuidance(BaseModule):
             encoder_hidden_states=text_embeddings_cond.repeat(
                 self.cfg.lora_n_timestamp_samples, 1, 1
             ),
-            # class_labels=camera_condition.view(B, -1).repeat(
-            #     self.cfg.lora_n_timestamp_samples, 1
-            # ),
+            class_labels=camera_condition.view(B, -1).repeat(
+                self.cfg.lora_n_timestamp_samples, 1
+            ),
             cross_attention_kwargs={"scale": 0.0},
         )
         return F.mse_loss(noise_pred.float(), target.float(), reduction="mean")
@@ -1094,8 +1099,8 @@ class StableDiffusionBSDGuidance(BaseModule):
             )
         # FIXME: use view-independent or dependent embeddings?
         text_embeddings_cond, _ = text_embeddings.chunk(2)
-        if self.cfg.lora_pretrain_cfg_training and random.random() < 0.1:
-            text_embeddings_cond = torch.zeros_like(text_embeddings_cond)
+        # if self.cfg.lora_pretrain_cfg_training and random.random() < 0.1:
+        #     text_embeddings_cond = torch.zeros_like(text_embeddings_cond)
         noise_pred = self.forward_unet(
             self.train_unet,
             noisy_latents,
@@ -1103,6 +1108,9 @@ class StableDiffusionBSDGuidance(BaseModule):
             encoder_hidden_states=text_embeddings_cond.repeat(
                 self.cfg.lora_pretrain_n_timestamp_samples, 1, 1
             ),
+            # class_labels=camera_condition.view(B, -1).repeat(
+            #     self.cfg.lora_pretrain_n_timestamp_samples, 1
+            # ),
         )
         loss_pretrain = F.mse_loss(noise_pred.float(), target.float(), reduction="mean")
         return loss_pretrain

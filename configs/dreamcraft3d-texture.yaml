@@ -78,12 +78,13 @@ system:
   guidance_type: "dreamcraft3d-stable-diffusion-bsd-guidance"
   guidance:
     pretrained_model_name_or_path: "stabilityai/stable-diffusion-2-1-base"
-    pretrained_model_name_or_path_lora: "stabilityai/stable-diffusion-2-1-base"
-    # pretrained_model_name_or_path_lora: "stabilityai/stable-diffusion-2-1"
-    guidance_scale: 2.0
+    # pretrained_model_name_or_path_lora: "stabilityai/stable-diffusion-2-1-base"
+    pretrained_model_name_or_path_lora: "stabilityai/stable-diffusion-2-1"
+    guidance_scale: 1.0
     min_step_percent: 0.05
-    max_step_percent: [0, 0.5, 0.2, 5000]
-    only_pretrain_step: 1000
+    max_step_percent: [0, 0.3, 0.1, 5000]
+    only_pretrain_step: 10
+    per_update_pretrain_step: 10
 
   freq:
     n_ref: 2
@@ -120,13 +121,17 @@ system:
       eps: 1.e-4
     params:
       geometry.encoding:
-        lr: 0.01
-      geometry.feature_network:
         lr: 0.001
+      geometry.feature_network:
+        lr: 0.0001
+      # guidance:
+      #   lr: 0.0001
       guidance.train_unet:
-        lr: 0.00001
+        lr: 0.00002
       guidance.train_unet_lora:
         lr: 0.00001
+      # guidance.camera_embedding_lora:
+      #   lr: 0.0001
 
 trainer:
   max_steps: 5000
@@ -136,8 +141,9 @@ trainer:
   enable_progress_bar: true
   precision: 32
   strategy: "ddp_find_unused_parameters_true"
+  gradient_clip_val: 1.0
 
 checkpoint:
   save_last: true
   save_top_k: -1
-  every_n_train_steps: ${trainer.max_steps}
+  every_n_train_steps: 0
