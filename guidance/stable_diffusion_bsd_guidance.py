@@ -175,23 +175,6 @@ class StableDiffusionBSDGuidance(BaseModule):
         self.camera_embedding_lora = ToWeightsDType(
             TimestepEmbedding(16, 1280), self.weights_dtype
         ).to(self.device)
-        # self.unet_lora.class_embedding = self.camera_embedding
-
-        # set up LoRA layers
-        # self.set_up_lora_layers(self.unet_lora)
-        # self.lora_layers = AttnProcsLayers(self.unet_lora.attn_processors).to(
-        #     self.device
-        # )
-        # self.lora_layers._load_state_dict_pre_hooks.clear()
-        # self.lora_layers._state_dict_hooks.clear()
-
-        # set up LoRA layers for pretrain
-        # self.set_up_lora_layers(self.unet)
-        # self.lora_layers_pretrain = AttnProcsLayers(self.unet.attn_processors).to(
-        #     self.device
-        # )
-        # self.lora_layers_pretrain._load_state_dict_pre_hooks.clear()
-        # self.lora_layers_pretrain._state_dict_hooks.clear()
 
         self.train_unet = UNet2DConditionModel.from_pretrained(
             self.cfg.pretrained_model_name_or_path,
@@ -200,7 +183,7 @@ class StableDiffusionBSDGuidance(BaseModule):
         )
         self.train_unet.enable_xformers_memory_efficient_attention()
         self.train_unet.enable_gradient_checkpointing()
-        # self.train_unet.class_embedding = self.camera_embedding
+        self.train_unet.class_embedding = self.camera_embedding
 
         self.train_unet_lora = UNet2DConditionModel.from_pretrained(
             self.cfg.pretrained_model_name_or_path_lora,
@@ -351,6 +334,7 @@ class StableDiffusionBSDGuidance(BaseModule):
         cross_attention_kwargs: Optional[Dict[str, Any]] = None,
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
         latents_inp: Optional[Float[Tensor, "..."]] = None,
+        mask: Optional[Float[Tensor, "..."]] = None,
     ) -> Float[Tensor, "B H W 3"]:
         vae_scale_factor = 2 ** (len(pipe.vae.config.block_out_channels) - 1)
         height = height or pipe.unet.config.sample_size * vae_scale_factor
@@ -361,6 +345,10 @@ class StableDiffusionBSDGuidance(BaseModule):
         sample_scheduler.set_timesteps(num_inference_steps, device=device)
         timesteps = sample_scheduler.timesteps
         num_channels_latents = pipe.unet.config.in_channels
+
+        B, C, DH, DW = latents_inp.shape
+        if mask is not None:
+            mask = F.interpolate(mask, (DH, DW), mode="bilinear", antialias=True)
 
         if latents_inp is not None:
             B = latents_inp.shape[0]
@@ -399,6 +387,7 @@ class StableDiffusionBSDGuidance(BaseModule):
                 device,
                 generator,
             )
+            t_start = 0
 
         for i, t in enumerate(timesteps[t_start:]):
             # expand the latents if we are doing classifier free guidance
@@ -406,7 +395,6 @@ class StableDiffusionBSDGuidance(BaseModule):
             latent_model_input = sample_scheduler.scale_model_input(
                 latent_model_input, t
             )
-            t_start = 0
 
             # predict the noise residual
             if class_labels is None:
@@ -431,9 +419,13 @@ class StableDiffusionBSDGuidance(BaseModule):
                 noise_pred_text - noise_pred_uncond
             )
 
-            # compute the previous noisy sample x_t -> x_t-1
-            latents = sample_scheduler.step(noise_pred, t, latents).prev_sample
+            if mask is not None:
+                noise_pred = noise_pred * mask + (1 - mask) * noise
 
+            # compute the previous noisy sample x_t -> x_t-1
+            latents = sample_scheduler.step(
+                noise_pred.to(latents), t, latents
+            ).prev_sample
         latents = 1 / pipe.vae.config.scaling_factor * latents
         images = pipe.vae.decode(latents).sample
         images = (images / 2 + 0.5).clamp(0, 1)
@@ -737,13 +729,13 @@ class StableDiffusionBSDGuidance(BaseModule):
                 torch.cat([t] * 2),
                 encoder_hidden_states=text_embeddings_vd,
                 cross_attention_kwargs=cross_attention_kwargs,
-                # class_labels=torch.cat(
-                #     [
-                #         camera_condition.view(B, -1),
-                #         camera_condition.view(B, -1),
-                #     ],
-                #     dim=0,
-                # ),
+                class_labels=torch.cat(
+                    [
+                        camera_condition.view(B, -1),
+                        camera_condition.view(B, -1),
+                    ],
+                    dim=0,
+                ),
             )
 
             # use view-independent text embeddings in LoRA
@@ -1012,41 +1004,46 @@ class StableDiffusionBSDGuidance(BaseModule):
         text_embeddings: Float[Tensor, "BB 77 768"],
         camera_condition: Float[Tensor, "B 4 4"],
         sample_new_img=False,
+        mask=None,
     ):
         B = latents.shape[0]
         if sample_new_img or len(self.cache_frames) == 0:
-            latents = latents.detach().repeat(
-                self.cfg.lora_pretrain_n_timestamp_samples, 1, 1, 1
-            )
-            images_sample = self._sample(
-                pipe=self.pipe_fix,
-                sample_scheduler=self.scheduler_sample,
-                text_embeddings=text_embeddings,
-                num_inference_steps=25,
-                guidance_scale=7.5,
-                cross_attention_kwargs={"scale": 0.0},
-                latents_inp=latents,
-            ).permute(0, 3, 1, 2)
-            from torchvision.utils import save_image
+            with torch.no_grad():
+                latents = latents.detach().repeat(
+                    self.cfg.lora_pretrain_n_timestamp_samples, 1, 1, 1
+                )
+                images_sample = self._sample(
+                    pipe=self.pipe_fix,
+                    sample_scheduler=self.scheduler_sample,
+                    text_embeddings=text_embeddings,
+                    num_inference_steps=25,
+                    guidance_scale=7.5,
+                    cross_attention_kwargs={"scale": 0.0},
+                    latents_inp=latents,
+                    mask=mask,
+                ).permute(0, 3, 1, 2)
+                from torchvision.utils import save_image
 
-            save_image(images_sample, f".threestudio_cache/test_sample.jpg")
-            self.cache_frames.append(images_sample)
+                save_image(images_sample, f".threestudio_cache/test_sample.jpg")
+                self.cache_frames.append(images_sample)
 
-            self.pipe.unet = self.train_unet
-            pretrain_images_sample = self._sample(
-                pipe=self.pipe,
-                sample_scheduler=self.scheduler_sample,
-                text_embeddings=text_embeddings,
-                num_inference_steps=25,
-                guidance_scale=1.0,
-                cross_attention_kwargs={"scale": 0.0},
-                latents_inp=latents,
-            ).permute(0, 3, 1, 2)
-            save_image(pretrain_images_sample, f".threestudio_cache/test_pretrain.jpg")
+                self.pipe.unet = self.train_unet
+                pretrain_images_sample = self._sample(
+                    pipe=self.pipe,
+                    sample_scheduler=self.scheduler_sample,
+                    text_embeddings=text_embeddings,
+                    num_inference_steps=25,
+                    guidance_scale=1.0,
+                    cross_attention_kwargs={"scale": 0.0},
+                    latents_inp=latents,
+                ).permute(0, 3, 1, 2)
+                save_image(
+                    pretrain_images_sample, f".threestudio_cache/test_pretrain.jpg"
+                )
         if len(self.cache_frames) > 10:
             self.cache_frames.pop(0)
         random_idx = torch.randint(0, len(self.cache_frames), [1]).item()
-        images_sample = self.cache_frames[random_idx]
+        images_sample = self.cache_frames[random_idx].detach().float()
 
         with torch.no_grad():
             latents_sample = self.get_latents(images_sample, rgb_as_latents=False)
@@ -1060,34 +1057,6 @@ class StableDiffusionBSDGuidance(BaseModule):
         )
 
         noise = torch.randn_like(latents)
-        # noisy_latents = self.scheduler_lora.add_noise(latents_sample, noise, t)
-        # if self.scheduler_lora.config.prediction_type == "epsilon":
-        #     target = noise
-        # elif self.scheduler_lora.config.prediction_type == "v_prediction":
-        #     target = self.scheduler_lora.get_velocity(latents_sample, noise, t)
-        # else:
-        #     raise ValueError(
-        #         f"Unknown prediction type {self.scheduler_lora.config.prediction_type}"
-        #     )
-        # # FIXME: use view-independent or dependent embeddings?
-        # text_embeddings_cond, _ = text_embeddings.chunk(2)
-        # if self.cfg.lora_pretrain_cfg_training and random.random() < 0.1:
-        #     text_embeddings_cond = torch.zeros_like(text_embeddings_cond)
-        # noise_pred = self.forward_unet(
-        #     self.unet_lora,
-        #     noisy_latents,
-        #     t,
-        #     encoder_hidden_states=text_embeddings_cond.repeat(
-        #         self.cfg.lora_pretrain_n_timestamp_samples, 1, 1
-        #     ),
-        #     cross_attention_kwargs={"scale": 0.0},
-        #     class_labels=torch.zeros_like(camera_condition.view(B, -1)).repeat(
-        #         self.cfg.lora_n_timestamp_samples, 1
-        #     ),
-        # )
-        # loss_pretrain = F.mse_loss(noise_pred.float(), target.float(), reduction="mean")
-        # return loss_pretrain
-
         noisy_latents = self.scheduler.add_noise(latents_sample, noise, t)
         if self.scheduler.config.prediction_type == "epsilon":
             target = noise
@@ -1108,9 +1077,9 @@ class StableDiffusionBSDGuidance(BaseModule):
             encoder_hidden_states=text_embeddings_cond.repeat(
                 self.cfg.lora_pretrain_n_timestamp_samples, 1, 1
             ),
-            # class_labels=camera_condition.view(B, -1).repeat(
-            #     self.cfg.lora_pretrain_n_timestamp_samples, 1
-            # ),
+            class_labels=camera_condition.view(B, -1).repeat(
+                self.cfg.lora_pretrain_n_timestamp_samples, 1
+            ),
         )
         loss_pretrain = F.mse_loss(noise_pred.float(), target.float(), reduction="mean")
         return loss_pretrain
@@ -1192,6 +1161,7 @@ class StableDiffusionBSDGuidance(BaseModule):
                 text_embeddings_vd,
                 camera_condition,
                 sample_new_img=sample_new_img,
+                mask=mask,
             )
             guidance_out.update(
                 {

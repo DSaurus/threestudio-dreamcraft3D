@@ -64,7 +64,7 @@ system:
 
   background_type: "solid-color-background"
 
-  renderer_type: "nvdiff-rasterizer"
+  renderer_type: "dreamcraft3d-mask-nvdiff-rasterizer"
   renderer:
     context_type: cuda
 
@@ -78,11 +78,11 @@ system:
   guidance_type: "dreamcraft3d-stable-diffusion-bsd-guidance"
   guidance:
     pretrained_model_name_or_path: "stabilityai/stable-diffusion-2-1-base"
-    # pretrained_model_name_or_path_lora: "stabilityai/stable-diffusion-2-1-base"
-    pretrained_model_name_or_path_lora: "stabilityai/stable-diffusion-2-1"
-    guidance_scale: 1.0
+    pretrained_model_name_or_path_lora: "stabilityai/stable-diffusion-2-1-base"
+    # pretrained_model_name_or_path_lora: "stabilityai/stable-diffusion-2-1"
+    guidance_scale: 7.5
     min_step_percent: 0.05
-    max_step_percent: [0, 0.3, 0.1, 5000]
+    max_step_percent: 0.3
     only_pretrain_step: 10
     per_update_pretrain_step: 10
 
@@ -104,7 +104,7 @@ system:
     lambda_pretrain: 0.1
     lambda_3d_sds: 0.0
     lambda_rgb: 1000.
-    lambda_mask: 100.
+    lambda_mask: 0.
     lambda_mask_binary: 0.0
     lambda_depth: 0.0
     lambda_depth_rel: 0.0
@@ -121,15 +121,15 @@ system:
       eps: 1.e-4
     params:
       geometry.encoding:
-        lr: 0.001
+        lr: 0.005
       geometry.feature_network:
-        lr: 0.0001
+        lr: 0.001
       # guidance:
       #   lr: 0.0001
       guidance.train_unet:
         lr: 0.00002
       guidance.train_unet_lora:
-        lr: 0.00001
+        lr: 0.00002
       # guidance.camera_embedding_lora:
       #   lr: 0.0001
 

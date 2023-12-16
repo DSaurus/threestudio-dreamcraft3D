@@ -212,6 +212,13 @@ class ImageConditionDreamFusion(BaseLift3DSystem):
                 guidance_inp = out["comp_normal"]
             else:
                 guidance_inp = out["comp_rgb"]
+            if self.cfg.stage == "texture":
+                opacity_mask = out["opacity"]
+                grow_mask = F.max_pool2d(
+                    1 - opacity_mask.float().permute(0, 3, 1, 2), (11, 11), 1, 5
+                )
+                grow_mask = (grow_mask.permute(0, 2, 3, 1) > 0.5).repeat(1, 1, 1, 3)
+                out["comp_rgb"][grow_mask] = out["comp_rgb"][grow_mask].detach()
             guidance_out = self.guidance(
                 guidance_inp,
                 prompt_utils,
