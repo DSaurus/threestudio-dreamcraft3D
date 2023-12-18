@@ -1,4 +1,7 @@
 # threestudio-dreamcraft3D
+<img src="https://github.com/DSaurus/threestudio-dreamcraft3D/assets/24589363/d9ad81e9-1154-4b41-8cc9-2b7d558e0282" width="" height="128">
+<img src="https://github.com/DSaurus/threestudio-dreamcraft3D/assets/24589363/6b27f858-8f88-47c3-98e9-c28401ab5e03" width="" height="128">
+<img src="https://github.com/DSaurus/threestudio-dreamcraft3D/assets/24589363/81bdec2d-3be7-4df1-a47b-1bdef8e36186" width="" height="128">
 
 The DreamCraft3D extension of threestudio. The original implementation can be found at https://github.com/deepseek-ai/DreamCraft3D. We thank them for their contribution to the 3D generation community. To use it, please install [threestudio](https://github.com/threestudio-project/threestudio) first and then install this extension in threestudio `custom` directory.
 
