@@ -23,6 +23,7 @@ To download stable-zero123, please go to the `load/zero123` directory and run `d
 prompt="a delicious hamburger"
 image_path="load/images/hamburger_rgba.png"
 
+# All stages need ~22G GPU memory
 # --------- Stage 1 (NeRF & NeuS) --------- #
 python launch.py --config custom/threestudio-dreamcraft3D/configs/dreamcraft3d-coarse-nerf.yaml --train system.prompt_processor.prompt="$prompt" data.image_path="$image_path"
 
