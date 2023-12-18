@@ -11,6 +11,13 @@ cd custom
 git clone https://github.com/DSaurus/threestudio-dreamcraft3D.git
 ```
 
+You also need to make sure that you have an access token from huggingface to use `DeepFloyd-IF`.
+```
+huggingface-cli login
+```
+
+To download stable-zero123, please go to the `load/zero123` directory and run `download.sh`.
+
 ## Quick Start
 ```
 prompt="a delicious hamburger"
