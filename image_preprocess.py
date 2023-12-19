@@ -153,9 +153,10 @@ if __name__ == "__main__":
     dpt_depth_model = DPT(task="depth")
     depth = dpt_depth_model(image)[0]
     depth[mask] = (depth[mask] - depth[mask].min()) / (
-        depth[mask].max() - depth[mask].min() + 1e-9
+        2 * depth[mask].mean() - depth[mask].min() + 1e-9
     )
     depth[~mask] = 0
+    depth[depth > 1.0] = 1.0
     depth = (depth * 255).astype(np.uint8)
     del dpt_depth_model
 
