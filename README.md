@@ -45,7 +45,7 @@ python launch.py --config custom/threestudio-dreamcraft3D/configs/dreamcraft3d-t
 
 ## Run with your custom image
 
-First preprocess images to remove background and get depth/normal maps. You can also get image caption with the following script.
+To run with your custom image, first you need preprocess images to remove background and get depth/normal maps. You can also get image caption with the following script.
 
 ```
 # preprocess images
@@ -56,7 +56,14 @@ python image_preprocess.py "examples/hamburger.png" --size 512 --border_ratio 0.
 cd ../..
 ```
 
-Then run dreamcraft3D using the following script.
+You will get the results, including rgba, depth and normal images.
+
+<img src="https://github.com/DSaurus/threestudio-dreamcraft3D/assets/24589363/b974eaa4-7d65-4826-9d89-ec714e4c6088" width="" height="128">
+<img src="https://github.com/DSaurus/threestudio-dreamcraft3D/assets/24589363/e6129499-7aeb-4fd4-ac9a-3befad451394" width="" height="128">
+<img src="https://github.com/DSaurus/threestudio-dreamcraft3D/assets/24589363/64508aca-b8ee-4302-bb2a-b331d64bcf09" width="" height="128">
+<img src="https://github.com/DSaurus/threestudio-dreamcraft3D/assets/24589363/ada1552e-c1c7-40e8-b44f-539224d0c873" width="" height="128">
+
+Then you can run dreamcraft3D using the following script.
 
 ```
 prompt="a delicious hamburger"
