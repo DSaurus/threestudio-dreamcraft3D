@@ -191,3 +191,6 @@ wandb/
 custom/*
 
 load/tets/256_tets.npz
+
+pretrained/
+examples/

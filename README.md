@@ -6,12 +6,50 @@ The DreamCraft3D extension of threestudio. The original implementation can be fo
 ```
 cd custom
 git clone https://github.com/DSaurus/threestudio-dreamcraft3D.git
+
+# If you want to use your custom image, please install background remover
+pip install backgroundremover
 ```
 
 ## Quick Start
 ```
 prompt="a delicious hamburger"
 image_path="load/images/hamburger_rgba.png"
+
+# --------- Stage 1 (NeRF & NeuS) --------- #
+python launch.py --config custom/threestudio-dreamcraft3D/configs/dreamcraft3d-coarse-nerf.yaml --train system.prompt_processor.prompt="$prompt" data.image_path="$image_path"
+
+ckpt=outputs/dreamcraft3d-coarse-nerf/$prompt@LAST/ckpts/last.ckpt
+python launch.py --config custom/threestudio-dreamcraft3D/configs/dreamcraft3d-coarse-neus.yaml --train system.prompt_processor.prompt="$prompt" data.image_path="$image_path" system.weights="$ckpt"
+
+# --------- Stage 2 (Geometry Refinement) --------- #
+ckpt=outputs/dreamcraft3d-coarse-neus/$prompt@LAST/ckpts/last.ckpt
+python launch.py --config custom/threestudio-dreamcraft3D/configs/dreamcraft3d-geometry.yaml --train system.prompt_processor.prompt="$prompt" data.image_path="$image_path" system.geometry_convert_from="$ckpt"
+
+
+# --------- Stage 3 (Texture Refinement) --------- #
+ckpt=outputs/dreamcraft3d-geometry/$prompt@LAST/ckpts/last.ckpt
+python launch.py --config custom/threestudio-dreamcraft3D/configs/dreamcraft3d-texture.yaml --train system.prompt_processor.prompt="$prompt" data.image_path="$image_path" system.geometry_convert_from="$ckpt"
+```
+
+## Run with your custom image
+
+First preprocess images to remove background and get depth/normal maps. You can also get image caption with the following script.
+
+```
+# preprocess images
+cd custom/threestudio-dreamcraft3D
+python image_preprocess.py "examples/hamburger.png" --size 512 --border_ratio 0.0
+# if you need image caption
+# python image_preprocess.py "examples/hamburger.png" --size 512 --border_ratio 0.0 --need_caption
+cd ../..
+```
+
+Then run dreamcraft3D using the following script.
+
+```
+prompt="a delicious hamburger"
+image_path="custom/threestudio-dreamcraft3D/examples/hamburger_rgba.png"
 
 # --------- Stage 1 (NeRF & NeuS) --------- #
 python launch.py --config custom/threestudio-dreamcraft3D/configs/dreamcraft3d-coarse-nerf.yaml --train system.prompt_processor.prompt="$prompt" data.image_path="$image_path"
