@@ -65,6 +65,14 @@ ckpt=outputs/dreamcraft3d-geometry/$prompt@LAST/ckpts/last.ckpt
 python launch.py --config custom/threestudio-dreamcraft3D/configs/dreamcraft3d-texture-fast.yaml --train system.prompt_processor.prompt="$prompt" data.image_path="$image_path" system.geometry_convert_from="$ckpt"
 ```
 
+## Mesh export
+```
+prompt="a delicious hamburger"
+image_path="load/images/hamburger_rgba.png"
+ckpt=path/to/last.ckpt
+python launch.py --config custom/threestudio-dreamcraft3D/configs/dreamcraft3d-YOURSTAGE.yaml --export system.prompt_processor.prompt="$prompt" data.image_path="$image_path" resume="$ckpt" system.exporter.context_type=cuda
+```
+
 ## Run with your custom image
 
 To run with your custom image, first you need preprocess images to remove background and get depth/normal maps. You can also get image caption with the following script.

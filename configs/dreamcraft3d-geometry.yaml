@@ -41,7 +41,6 @@ system_type: "dreamcraft3d-system"
 system:
   stage: geometry
   use_mixed_camera_config: ${data.use_mixed_camera_config}
-  geometry_convert_from: ???
   geometry_convert_inherit_texture: true
   geometry_type: "tetrahedra-sdf-grid"
   geometry:
