@@ -625,10 +625,14 @@ class ImageConditionDreamFusion(BaseLift3DSystem):
         for k in list(checkpoint["state_dict"].keys()):
             if k.startswith("guidance."):
                 return
-        guidance_state_dict = {
-            "guidance." + k: v for (k, v) in self.guidance.state_dict().items()
-        }
-        checkpoint["state_dict"] = {**checkpoint["state_dict"], **guidance_state_dict}
+        if hasattr(self.guidance, "state_dict"):
+            guidance_state_dict = {
+                "guidance." + k: v for (k, v) in self.guidance.state_dict().items()
+            }
+            checkpoint["state_dict"] = {
+                **checkpoint["state_dict"],
+                **guidance_state_dict,
+            }
         return
 
     def on_save_checkpoint(self, checkpoint):
