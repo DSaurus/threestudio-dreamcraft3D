@@ -151,6 +151,7 @@ if __name__ == "__main__":
             print(f"[INFO] using existing background: {out_rgba}")
         else:
             raise ValueError(f"cannot find existing background: {out_rgba}")
+        opt.recenter = False
     carved_image = cv2.imread(out_rgba, cv2.IMREAD_UNCHANGED)
     carved_image = cv2.cvtColor(carved_image, cv2.COLOR_BGRA2RGBA)
     mask = carved_image[..., -1] > 0
