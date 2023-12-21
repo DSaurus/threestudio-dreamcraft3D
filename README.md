@@ -21,12 +21,12 @@ huggingface-cli login
 
 To download stable-zero123, please go to the `load/zero123` directory and run `download.sh`.
 
-## Quick Start
+## Quick Start (original config)
 ```
+# It will take about 3 hours and ~22G GPU memory to run all stages
 prompt="a delicious hamburger"
 image_path="load/images/hamburger_rgba.png"
 
-# All stages need ~22G GPU memory
 # --------- Stage 1 (NeRF & NeuS) --------- #
 python launch.py --config custom/threestudio-dreamcraft3D/configs/dreamcraft3d-coarse-nerf.yaml --train system.prompt_processor.prompt="$prompt" data.image_path="$image_path"
 
@@ -41,6 +41,28 @@ python launch.py --config custom/threestudio-dreamcraft3D/configs/dreamcraft3d-g
 # --------- Stage 3 (Texture Refinement) --------- #
 ckpt=outputs/dreamcraft3d-geometry/$prompt@LAST/ckpts/last.ckpt
 python launch.py --config custom/threestudio-dreamcraft3D/configs/dreamcraft3d-texture.yaml --train system.prompt_processor.prompt="$prompt" data.image_path="$image_path" system.geometry_convert_from="$ckpt"
+```
+
+## Quick Start (fast config)
+```
+# It will take about 40min to run all stages
+prompt="a delicious hamburger"
+image_path="load/images/hamburger_rgba.png"
+
+# --------- Stage 1 (NeRF & NeuS) --------- #
+python launch.py --config custom/threestudio-dreamcraft3D/configs/dreamcraft3d-coarse-nerf-fast.yaml --train system.prompt_processor.prompt="$prompt" data.image_path="$image_path"
+
+ckpt=outputs/dreamcraft3d-coarse-nerf/$prompt@LAST/ckpts/last.ckpt
+python launch.py --config custom/threestudio-dreamcraft3D/configs/dreamcraft3d-coarse-neus-fast.yaml --train system.prompt_processor.prompt="$prompt" data.image_path="$image_path" system.weights="$ckpt"
+
+# --------- Stage 2 (Geometry Refinement) --------- #
+ckpt=outputs/dreamcraft3d-coarse-neus/$prompt@LAST/ckpts/last.ckpt
+python launch.py --config custom/threestudio-dreamcraft3D/configs/dreamcraft3d-geometry-fast.yaml --train system.prompt_processor.prompt="$prompt" data.image_path="$image_path" system.geometry_convert_from="$ckpt"
+
+
+# --------- Stage 3 (Texture Refinement) --------- #
+ckpt=outputs/dreamcraft3d-geometry/$prompt@LAST/ckpts/last.ckpt
+python launch.py --config custom/threestudio-dreamcraft3D/configs/dreamcraft3d-texture-fast.yaml --train system.prompt_processor.prompt="$prompt" data.image_path="$image_path" system.geometry_convert_from="$ckpt"
 ```
 
 ## Run with your custom image
@@ -83,6 +105,28 @@ python launch.py --config custom/threestudio-dreamcraft3D/configs/dreamcraft3d-g
 # --------- Stage 3 (Texture Refinement) --------- #
 ckpt=outputs/dreamcraft3d-geometry/$prompt@LAST/ckpts/last.ckpt
 python launch.py --config custom/threestudio-dreamcraft3D/configs/dreamcraft3d-texture.yaml --train system.prompt_processor.prompt="$prompt" data.image_path="$image_path" system.geometry_convert_from="$ckpt"
+```
+
+Or you can run with fast config:
+
+```
+prompt="a delicious hamburger"
+image_path="custom/threestudio-dreamcraft3D/examples/hamburger_rgba.png"
+
+# --------- Stage 1 (NeRF & NeuS) --------- #
+python launch.py --config custom/threestudio-dreamcraft3D/configs/dreamcraft3d-coarse-nerf-fast.yaml --train system.prompt_processor.prompt="$prompt" data.image_path="$image_path"
+
+ckpt=outputs/dreamcraft3d-coarse-nerf/$prompt@LAST/ckpts/last.ckpt
+python launch.py --config custom/threestudio-dreamcraft3D/configs/dreamcraft3d-coarse-neus-fast.yaml --train system.prompt_processor.prompt="$prompt" data.image_path="$image_path" system.weights="$ckpt"
+
+# --------- Stage 2 (Geometry Refinement) --------- #
+ckpt=outputs/dreamcraft3d-coarse-neus/$prompt@LAST/ckpts/last.ckpt
+python launch.py --config custom/threestudio-dreamcraft3D/configs/dreamcraft3d-geometry-fast.yaml --train system.prompt_processor.prompt="$prompt" data.image_path="$image_path" system.geometry_convert_from="$ckpt"
+
+
+# --------- Stage 3 (Texture Refinement) --------- #
+ckpt=outputs/dreamcraft3d-geometry/$prompt@LAST/ckpts/last.ckpt
+python launch.py --config custom/threestudio-dreamcraft3D/configs/dreamcraft3d-texture-fast.yaml --train system.prompt_processor.prompt="$prompt" data.image_path="$image_path" system.geometry_convert_from="$ckpt"
 ```
 
 ## Citing
