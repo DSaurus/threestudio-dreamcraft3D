@@ -75,6 +75,8 @@ cd custom/threestudio-dreamcraft3D
 python image_preprocess.py "examples/hamburger.png" --size 512 --border_ratio 0.0
 # if you need image caption
 # python image_preprocess.py "examples/hamburger.png" --size 512 --border_ratio 0.0 --need_caption
+# if you remove backgounrd using other tools like ClipDrop, you need put the processed image to "examples/hamburger_rgba.png" and add option use_existing_background
+# python image_preprocess.py "examples/hamburger.png" --size 512 --border_ratio 0.0 --use_existing_background
 cd ../..
 ```
 

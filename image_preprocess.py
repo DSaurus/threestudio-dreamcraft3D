@@ -117,6 +117,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--dont_recenter", dest="recenter", action="store_false")
     parser.add_argument("--need_caption", action="store_true")
+    parser.add_argument("--use_existing_background", action="store_true")
     opt = parser.parse_args()
 
     out_dir = os.path.dirname(opt.path)
@@ -143,7 +144,13 @@ if __name__ == "__main__":
 
     # carve background
     print(f"[INFO] background removal...")
-    os.system("backgroundremover -i {} -o {}".format(opt.path, out_rgba))
+    if not opt.use_existing_background:
+        os.system("backgroundremover -i {} -o {}".format(opt.path, out_rgba))
+    else:
+        if os.path.exists(out_rgba):
+            print(f"[INFO] using existing background: {out_rgba}")
+        else:
+            raise ValueError(f"cannot find existing background: {out_rgba}")
     carved_image = cv2.imread(out_rgba, cv2.IMREAD_UNCHANGED)
     carved_image = cv2.cvtColor(carved_image, cv2.COLOR_BGRA2RGBA)
     mask = carved_image[..., -1] > 0
